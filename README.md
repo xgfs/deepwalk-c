@@ -54,7 +54,7 @@ Even though the algorithm claims to be 'online', hierarchical softmax tree must 
 Measured on i7-5930k. Blogcatalog graph (n=10312) with default parameters (gamma=80, t=80, d=128, w=10):
 
 | Version | 6 threads  | 12 threads |
-| - | - | - | - |
+| --- | --- | --- |
 | Original (cython) | 395.41s  | 480.13s |
 | This (c++) | 137.34s | 112.32s |
 
