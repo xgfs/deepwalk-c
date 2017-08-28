@@ -4,6 +4,7 @@
 #include <iomanip>
 #include <iostream>
 #include <numeric>
+#include <string.h>
 #include <omp.h>
 #include <queue>
 
@@ -34,9 +35,11 @@ typedef unsigned long long ull;
 typedef unsigned char byte;
 
 // <MODEL_DEF>
+#ifndef INIT_HSM
 #define INIT_HSM                                                               \
   HSM_INIT_PR // change here to use different HSM initialization. PR init tested
               // to be the best cost/performance ratio
+#endif
 // </MODEL_DEF>
 
 #if !defined(INIT_HSM)
@@ -348,7 +351,7 @@ void Train() {
         DEFAULT_ALIGN)); // cache for updating the gradient of a node
 #pragma omp barrier
     while (true) {
-      if (ncount > 100) { // update progress every now and then
+      if (ncount > 10) { // update progress every now and then
 #pragma omp atomic
         step += ncount;
         if (step > total_steps) // note than we may train for a little longer
@@ -516,5 +519,4 @@ int main(int argc, char **argv) {
   ofstream output(embedding_file, ios::binary);
   output.write(reinterpret_cast<char *>(wVtx), sizeof(float) * n_hidden * nv);
   output.close();
-  getchar();
 }

@@ -11,6 +11,7 @@ def mat_to_bcsr(fname, mat):
     with open(fname, 'wb') as outf:
         nv = mat.shape[0]
         ne = mat.nnz
+        print('nv', nv, 'ne', ne)
         outf.write(str.encode('XGFS'))
         outf.write(pack('q', nv))
         outf.write(pack('q', ne))
@@ -47,13 +48,19 @@ def process(args):
                 splt = line.split()
             else:
                 splt = line.split(args.sep)
-            if args.format == "edgelist" and len(splt) > 2:
-                if abs(float(splt[2]) - 1) >= 1e-4:
-                    raise ValueError("Weighted graphs are not supported")
+            if args.format == "edgelist":
+                if len(splt) == 3:
+                    if abs(float(splt[2]) - 1) >= 1e-4:
+                        raise ValueError("Weighted graphs are not supported")
+                    else:
+                        splt = splt[:-1]
+                else:
+                    raise ValueError("Incorrect graph format")        
             for node in splt:
                 nodes.add(node)
     number_of_nodes = len(nodes)
     isnumbers = is_numbers_only(nodes)
+    print('Node IDs are numbers: ', isnumbers)
     if isnumbers:
         node2id = dict(zip(sorted(map(int, nodes)), range(number_of_nodes)))
     else:
@@ -71,6 +78,8 @@ def process(args):
                 src = node2id[int(splt[0])]
             else:
                 src = node2id[splt[0]]
+            if args.format == "edgelist" and len(splt) == 3:
+                splt = splt[:-1]
             for node in splt[1:]:
                 if isnumbers:
                     tgt = node2id[int(node)]
@@ -90,6 +99,7 @@ def process(args):
         for adjv in sorted(graph[node]):
             indices[cur] = adjv
             cur += 1
+    print('nv', number_of_nodes, 'ne', number_of_edges)
     with open(args.output, 'wb') as outf:
         outf.write(str.encode('XGFS'))
         outf.write(pack('q', number_of_nodes))
