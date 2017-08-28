@@ -7,17 +7,17 @@ endif
 
 ifeq ($(COMP),g++)
 	CC=g++
-	CXXFLAGS += -fopenmp -Ofast -mavx
+	CXXFLAGS += -fopenmp -Ofast
 endif
 
 ifeq ($(COMP),icpc)
 	CC=icpc
-	CXXFLAGS += -qopenmp -O3 -no-prec-div -ansi-alias -axavx -ansi-alias -ip -march=native
+	CXXFLAGS += -qopenmp -O3 -no-prec-div -ansi-alias -ip
 endif
 
 ifeq ($(COMP),clang++)
 	CC=clang++
-	CXXFLAGS += -fopenmp -O3 -mavx -march=native
+	CXXFLAGS += -fopenmp -O3
 endif
 
 all: hello
