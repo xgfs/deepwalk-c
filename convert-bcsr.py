@@ -44,6 +44,7 @@ def process(args):
         for line in inf:
             if line.startswith('#'):
                 continue
+            line = line.strip()
             if args.sep is None:
                 splt = line.split()
             else:
@@ -70,6 +71,7 @@ def process(args):
         for line in inf:
             if line.startswith('#'):
                 continue
+            line = line.strip()
             if args.sep is None:
                 splt = line.split()
             else:
