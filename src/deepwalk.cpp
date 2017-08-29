@@ -413,38 +413,38 @@ int main(int argc, char **argv) {
   string network_file, embedding_file;
   ull seed = time(nullptr); // default seed is somewhat random
   init_sigmoid_table();
-  if ((a = ArgPos(static_cast<char *>("-input"), argc, argv)) > 0)
+  if ((a = ArgPos(const_cast<char *>("-input"), argc, argv)) > 0)
     network_file = argv[a + 1];
   else {
     if (verbosity > 0)
       cout << "Input file not given! Aborting now.." << endl;
     return 1;
   }
-  if ((a = ArgPos(static_cast<char *>("-output"), argc, argv)) > 0)
+  if ((a = ArgPos(const_cast<char *>("-output"), argc, argv)) > 0)
     embedding_file = argv[a + 1];
   else {
     if (verbosity > 0)
       cout << "Output file not given! Aborting now.." << endl;
     return 1;
   }
-  if ((a = ArgPos(static_cast<char *>("-dim"), argc, argv)) > 0)
+  if ((a = ArgPos(const_cast<char *>("-dim"), argc, argv)) > 0)
     n_hidden = atoi(argv[a + 1]);
-  if ((a = ArgPos(static_cast<char *>("-seed"), argc, argv)) > 0)
+  if ((a = ArgPos(const_cast<char *>("-seed"), argc, argv)) > 0)
 	seed = atoi(argv[a + 1]);
-  if ((a = ArgPos(static_cast<char *>("-verbose"), argc, argv)) > 0)
+  if ((a = ArgPos(const_cast<char *>("-verbose"), argc, argv)) > 0)
     verbosity = atoi(argv[a + 1]);
-  if ((a = ArgPos(static_cast<char *>("-threads"), argc, argv)) > 0)
+  if ((a = ArgPos(const_cast<char *>("-threads"), argc, argv)) > 0)
     n_threads = atoi(argv[a + 1]);
-  if ((a = ArgPos(static_cast<char *>("-lr"), argc, argv)) > 0)
+  if ((a = ArgPos(const_cast<char *>("-lr"), argc, argv)) > 0)
     initial_lr = atof(argv[a + 1]);
-  if ((a = ArgPos(static_cast<char *>("-nwalks"), argc, argv)) > 0)
+  if ((a = ArgPos(const_cast<char *>("-nwalks"), argc, argv)) > 0)
     dw_n_walks = atoi(argv[a + 1]);
-  if ((a = ArgPos(static_cast<char *>("-walklen"), argc, argv)) > 0)
+  if ((a = ArgPos(const_cast<char *>("-walklen"), argc, argv)) > 0)
     dw_walk_length = atoi(argv[a + 1]);
-  if ((a = ArgPos(static_cast<char *>("-window"), argc, argv)) > 0)
+  if ((a = ArgPos(const_cast<char *>("-window"), argc, argv)) > 0)
     dw_window_size = atoi(argv[a + 1]);
 #if INIT_HSM == HSM_INIT_PR
-  if ((a = ArgPos(static_cast<char *>("-nprwalks"), argc, argv)) > 0)
+  if ((a = ArgPos(const_cast<char *>("-nprwalks"), argc, argv)) > 0)
     dw_window_size = atoi(argv[a + 1]);
 #endif
   for (int i = 0; i < 2; i++) { // seed the RNG
