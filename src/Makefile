@@ -1,30 +1,28 @@
-CC=g++
+TARGET = deepwalk
+
+SOURCES = $(wildcard *.cpp)
+OBJECTS = $(SOURCES:*.cpp=*.o)
+
 CXXFLAGS = -std=c++11 -march=native
 
-ifeq ($(COMP),)
-	CC=g++
+ifeq ($(CXX), g++)
 	CXXFLAGS += -fopenmp -Ofast -Wno-write-strings
-endif
-
-ifeq ($(COMP),g++)
-	CC=g++
-	CXXFLAGS += -fopenmp -Ofast -Wno-write-strings
-endif
-
-ifeq ($(COMP),icpc)
-	CC=icpc
+else ifeq ($(CXX), icpc)
 	CXXFLAGS += -qopenmp -O3 -no-prec-div -ansi-alias -ip -static-intel
-endif
-
-ifeq ($(COMP),clang++)
-	CC=clang++
+else ifeq ($(CXX), clang++)
 	CXXFLAGS += -fopenmp -O3
+else
+	# use g++ on default
+	CXX = g++
+	CXXFLAGS += -fopenmp -Ofast -Wno-write-strings
 endif
 
-all: deepwalk
+all: $(TARGET)
 
-deepwalk: deepwalk.cpp
-	$(CC) $(CXXFLAGS) deepwalk.cpp -o deepwalk
+$(TARGET): $(OBJECTS)
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $^
 
 clean:
-	rm deepwalk
+	rm -rfv $(OBJECTS) $(TARGET)
+
+.PHONY: all clean
