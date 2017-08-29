@@ -4,12 +4,12 @@
 list, edge list) can be found in the root directory of the project.
 """
 
-import click
-import numpy as np
-
 from collections import defaultdict
 from scipy.io import loadmat
 from struct import pack
+
+import click
+import numpy as np
 
 
 def mat_to_bcsr(fname, mat):
@@ -47,6 +47,7 @@ def process(format, matfile_variable_name, undirected, sep, input, output):
         for line in inf:
             if line.startswith('#'):
                 continue
+            line = line.strip()
             if sep is None:
                 splt = line.split()
             else:
@@ -73,6 +74,7 @@ def process(format, matfile_variable_name, undirected, sep, input, output):
         for line in inf:
             if line.startswith('#'):
                 continue
+            line = line.strip()
             if sep is None:
                 splt = line.split()
             else:
