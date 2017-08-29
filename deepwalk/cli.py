@@ -1,10 +1,15 @@
+#   encoding: utf8
+#   cli.py
+"""Converter for three common graph formats (MATLAB sparse matrix, adjacency
+list, edge list) can be found in the root directory of the project.
+"""
+
+import click
 import numpy as np
-from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
-from scipy.io import loadmat, savemat
-from scipy.sparse import dok_matrix
+
 from collections import defaultdict
+from scipy.io import loadmat
 from struct import pack
-from sys import exit
 
 
 def mat_to_bcsr(fname, mat):
@@ -28,34 +33,32 @@ def is_numbers_only(nodes):
     return True
 
 
-def process(args):
-    if args.format == "mat":
-        mtx = loadmat(args.input)[args.matfile_variable_name].tocsr()
-        if args.undirected:
+def process(format, matfile_variable_name, undirected, sep, input, output):
+    if format == "mat":
+        mtx = loadmat(input)[matfile_variable_name].tocsr()
+        if undirected:
             mtx = mtx + mtx.T  # we dont care about weights anyway
-        mat_to_bcsr(args.output, mtx)
-    elif args.format in ['edgelist', 'adjlist']:
+        mat_to_bcsr(output, mtx)
+    elif format in ['edgelist', 'adjlist']:
         pass
-    else:
-        raise Exception(
-            "Unknown file format: '%s'.  Valid formats: 'adjlist', 'edgelist', 'mat'" % args.format)
+
     nodes = set()
-    with open(args.input, 'r') as inf:
+    with open(input, 'r') as inf:
         for line in inf:
             if line.startswith('#'):
                 continue
-            if args.sep is None:
+            if sep is None:
                 splt = line.split()
             else:
-                splt = line.split(args.sep)
-            if args.format == "edgelist":
+                splt = line.split(sep)
+            if format == "edgelist":
                 if len(splt) == 3:
                     if abs(float(splt[2]) - 1) >= 1e-4:
                         raise ValueError("Weighted graphs are not supported")
                     else:
                         splt = splt[:-1]
                 else:
-                    raise ValueError("Incorrect graph format")        
+                    raise ValueError("Incorrect graph format")
             for node in splt:
                 nodes.add(node)
     number_of_nodes = len(nodes)
@@ -66,19 +69,19 @@ def process(args):
     else:
         node2id = dict(zip(nodes), range(number_of_nodes))
     graph = defaultdict(set)
-    with open(args.input, 'r') as inf:
+    with open(input, 'r') as inf:
         for line in inf:
             if line.startswith('#'):
                 continue
-            if args.sep is None:
+            if sep is None:
                 splt = line.split()
             else:
-                splt = line.split(args.sep)
+                splt = line.split(sep)
             if isnumbers:
                 src = node2id[int(splt[0])]
             else:
                 src = node2id[splt[0]]
-            if args.format == "edgelist" and len(splt) == 3:
+            if format == "edgelist" and len(splt) == 3:
                 splt = splt[:-1]
             for node in splt[1:]:
                 if isnumbers:
@@ -86,7 +89,7 @@ def process(args):
                 else:
                     tgt = node2id[node]
                 graph[src].add(tgt)
-                if args.undirected:
+                if undirected:
                     graph[tgt].add(src)
     indptr = np.zeros(number_of_nodes + 1, dtype=np.int32)
     indptr[0] = 0
@@ -100,7 +103,7 @@ def process(args):
             indices[cur] = adjv
             cur += 1
     print('nv', number_of_nodes, 'ne', number_of_edges)
-    with open(args.output, 'wb') as outf:
+    with open(output, 'wb') as outf:
         outf.write(str.encode('XGFS'))
         outf.write(pack('q', number_of_nodes))
         outf.write(pack('q', number_of_edges))
@@ -108,32 +111,17 @@ def process(args):
         outf.write(pack(str(number_of_edges) + 'i', *indices))
 
 
-def main():
-    parser = ArgumentParser("convert-bcsr",
-                            formatter_class=ArgumentDefaultsHelpFormatter,
-                            conflict_handler='resolve')
-
-    parser.add_argument('--format', default='edgelist',
-                        help='File format of input file')
-
-    parser.add_argument('--input', nargs='?', required=True,
-                        help='Input graph file')
-
-    parser.add_argument('--matfile-variable-name', default='network',
-                        help='variable name of adjacency matrix inside a .mat file.')
-
-    parser.add_argument('--output', required=True,
-                        help='Output representation file')
-
-    parser.add_argument('--undirected', default=True, type=bool,
-                        help='Treat graph as undirected.')
-
-    parser.add_argument('--sep', default=' ',
-                        help='Separator of input file')
-
-    args = parser.parse_args()
-    process(args)
-
-
-if __name__ == "__main__":
-    exit(main())
+@click.command(help=__doc__)
+@click.option('--format',
+              default='edgelist',
+              type=click.Choice(['mat', 'edgelist', 'adjlist']),
+              help='File format of input file')
+@click.option('--matfile-variable-name', default='network',
+              help='variable name of adjacency matrix inside a .mat file.')
+@click.option('--undirected/--directed', default=True, is_flag=True,
+              help='Treat graph as undirected.')
+@click.option('--sep', default=' ', help='Separator of input file')
+@click.argument('input', type=click.Path())
+@click.argument('output', type=click.Path())
+def main(format, matfile_variable_name, undirected, sep, input, output):
+    process(format, matfile_variable_name, undirected, sep, input, output)

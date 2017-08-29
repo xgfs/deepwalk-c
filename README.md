@@ -18,10 +18,21 @@ Intel® FMA availability is crucial for performance of the implementation, meani
 
 This implementation uses a custom graph format, namely binary [compressed sparse row](https://en.wikipedia.org/wiki/Sparse_matrix#Compressed_sparse_row_.28CSR.2C_CRS_or_Yale_format.29) (BCSR) format for efficiency and reduced memory usage. Converter for three common graph formats (MATLAB sparse matrix, adjacency list, edge list) can be found in the root directory of the project. Usage:
 
-```bash
-convert-bcsr.py [-h] [--format FORMAT] --input [INPUT]
-                    [--matfile-variable-name MATFILE_VARIABLE_NAME]
-                    --output OUTPUT [--undirected UNDIRECTED] [--sep SEP]
+```
+$ convert-bcsr --help
+Usage: convert-bcsr [OPTIONS] INPUT OUTPUT
+
+  Converter for three common graph formats (MATLAB sparse matrix, adjacency
+  list, edge list) can be found in the root directory of the project.
+
+Options:
+  --format [mat|edgelist|adjlist]
+                                  File format of input file
+  --matfile-variable-name TEXT    variable name of adjacency matrix inside a
+                                  .mat file.
+  --undirected / --directed       Treat graph as undirected.
+  --sep TEXT                      Separator of input file
+  --help                          Show this message and exit.
 ```
 
 1. ``--format adjlist`` for an adjacency list, e.g:
