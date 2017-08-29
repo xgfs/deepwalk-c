@@ -1,7 +1,7 @@
 TARGET = deepwalk
 
 SOURCES = $(wildcard *.cpp)
-OBJECTS = $(SOURCES:*.cpp=*.o)
+OBJECTS = $(SOURCES:.cpp=.o)
 
 CXXFLAGS = -std=c++11 -march=native
 
@@ -12,7 +12,7 @@ else ifeq ($(CXX), icpc)
 else ifeq ($(CXX), clang++)
 	CXXFLAGS += -fopenmp -O3
 else
-	# use g++ on default
+	# use g++ by default
 	CXX = g++
 	CXXFLAGS += -fopenmp -Ofast -Wno-write-strings
 endif
