@@ -408,7 +408,7 @@ void Train() {
   }
 }
 
-int main(int argc, char **argv) {
+int run(int argc, char **argv) {
   int a;
   string network_file, embedding_file;
   ull seed = time(nullptr); // default seed is somewhat random
