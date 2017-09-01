@@ -89,6 +89,15 @@ float *sigmoid_table;
 // We use xoroshiro128+, the fastest generator available
 uint64_t rng_seed[2];
 
+void init_rng(uint64_t seed) {
+    for (int i = 0; i < 2; i++) {
+        ull z = seed += UINT64_C(0x9E3779B97F4A7C15);
+        z = (z ^ z >> 30) * UINT64_C(0xBF58476D1CE4E5B9);
+        z = (z ^ z >> 27) * UINT64_C(0x94D049BB133111EB);
+        rng_seed[i] = z ^ (z >> 31);
+    }
+}
+
 static inline uint64_t rotl(const uint64_t x, int k) {
   return (x << k) | (x >> (64 - k));
 }
@@ -478,12 +487,7 @@ int run(int argc, char **argv) {
   if ((a = ArgPos(const_cast<char *>("-nprwalks"), argc, argv)) > 0)
     dw_window_size = atoi(argv[a + 1]);
 #endif
-  for (int i = 0; i < 2; i++) { // seed the RNG
-	ull z = seed += UINT64_C(0x9E3779B97F4A7C15);
-	z = (z ^ z >> 30) * UINT64_C(0xBF58476D1CE4E5B9);
-	z = (z ^ z >> 27) * UINT64_C(0x94D049BB133111EB);
-	rng_seed[i] = z ^ (z >> 31);
-  }
+  init_rng(seed);
   ifstream embFile(network_file, ios::in | ios::binary);
   if (embFile.is_open()) {
     char header[] = "----";
