@@ -321,11 +321,12 @@ void init_hsm(float *probs) {
 
         int ida = idx[a];
         int curptr = hsm_indptrs[ida];
+        hsm_codes[ida] = 0;
 
         for (int b = 0; b < i; ++b) {
             // set bit i - b - 1 faith in operator priority
             hsm_codes[ida] ^= (hsm_codes[ida] ^ -code[b]) & 1 << i - b - 1;
-            hsm_ptrs[curptr + i - b] = point[b] - nv;
+            hsm_ptrs[curptr + i - b - 1] = point[b] - nv;
         }
     }
 
