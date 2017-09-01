@@ -9,3 +9,7 @@ deepwalk
 *.pyc
 __pycache__/
 *.egg-info/
+
+# ignore swap files, graph files and other data files
+*.swp
+*.xgfs

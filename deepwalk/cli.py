@@ -9,19 +9,29 @@ from scipy.io import loadmat
 from struct import pack
 
 import click
+import logging
 import numpy as np
 
 
-def mat_to_bcsr(fname, mat):
-    with open(fname, 'wb') as outf:
-        nv = mat.shape[0]
-        ne = mat.nnz
-        print('nv', nv, 'ne', ne)
-        outf.write(str.encode('XGFS'))
-        outf.write(pack('q', nv))
-        outf.write(pack('q', ne))
-        outf.write(pack(str(nv) + 'i', *mat.indptr[:-1]))
-        outf.write(pack(str(ne) + 'i', *mat.indices))
+MAGIC = 'XGFS'.encode('utf8')
+
+
+def mat2xgfs(filename, undirected, varname):
+    mat = loadmat(filename)[varname].tocsr()
+    if undirected:
+        mat= mat + mat.T  # we dont care about weights anyway
+    return mat.indptr[:-1], mat.indices
+
+
+def xgfs2file(outf, indptr, indices):
+    nv = indptr.size
+    ne = indices.size
+    logging.info('num vertices=%d; num edges=%d;', nv, ne)
+    outf.write(MAGIC)
+    outf.write(pack('q', nv))
+    outf.write(pack('q', ne))
+    outf.write(pack('%di' % nv, *indptr))
+    outf.write(pack('%di' % ne, *indices))
 
 
 def is_numbers_only(nodes):
@@ -32,16 +42,7 @@ def is_numbers_only(nodes):
             return False
     return True
 
-
-def process(format, matfile_variable_name, undirected, sep, input, output):
-    if format == "mat":
-        mtx = loadmat(input)[matfile_variable_name].tocsr()
-        if undirected:
-            mtx = mtx + mtx.T  # we dont care about weights anyway
-        mat_to_bcsr(output, mtx)
-    elif format in ['edgelist', 'adjlist']:
-        pass
-
+def list2mat(input, undirected, sep):
     nodes = set()
     with open(input, 'r') as inf:
         for line in inf:
@@ -64,7 +65,7 @@ def process(format, matfile_variable_name, undirected, sep, input, output):
                 nodes.add(node)
     number_of_nodes = len(nodes)
     isnumbers = is_numbers_only(nodes)
-    print('Node IDs are numbers: ', isnumbers)
+    logging.info('Node IDs are numbers: %s', isnumbers)
     if isnumbers:
         node2id = dict(zip(sorted(map(int, nodes)), range(number_of_nodes)))
     else:
@@ -104,13 +105,17 @@ def process(format, matfile_variable_name, undirected, sep, input, output):
         for adjv in sorted(graph[node]):
             indices[cur] = adjv
             cur += 1
-    print('nv', number_of_nodes, 'ne', number_of_edges)
-    with open(output, 'wb') as outf:
-        outf.write(str.encode('XGFS'))
-        outf.write(pack('q', number_of_nodes))
-        outf.write(pack('q', number_of_edges))
-        outf.write(pack(str(number_of_nodes) + 'i', *indptr[:-1]))
-        outf.write(pack(str(number_of_edges) + 'i', *indices))
+    return indptr[:-1], indices
+
+
+def process(format, matfile_variable_name, undirected, sep, input, output):
+    if format == "mat":
+        indptr, indices = mat2xgfs(input, undirected, matfile_variable_name)
+    elif format in ['edgelist', 'adjlist']:
+        indptr, indices = list2mat(input, undirected, sep)
+
+    with open(output, 'wb') as fout:
+        xgfs2file(fout, indptr, indices)
 
 
 @click.command(help=__doc__)
@@ -126,4 +131,8 @@ def process(format, matfile_variable_name, undirected, sep, input, output):
 @click.argument('input', type=click.Path())
 @click.argument('output', type=click.Path())
 def main(format, matfile_variable_name, undirected, sep, input, output):
+    logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s',
+                        level=logging.INFO)
+    logging.info('convert graph from %s to %s', input, output)
     process(format, matfile_variable_name, undirected, sep, input, output)
+    logging.info('done.')
