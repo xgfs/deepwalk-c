@@ -1,3 +1,4 @@
+#include "deepwalk.h"
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -87,6 +88,15 @@ float *sigmoid_table;
 // http://xoroshiro.di.unimi.it/#shootout
 // We use xoroshiro128+, the fastest generator available
 uint64_t rng_seed[2];
+
+void init_rng(uint64_t seed) {
+    for (int i = 0; i < 2; i++) {
+        ull z = seed += UINT64_C(0x9E3779B97F4A7C15);
+        z = (z ^ z >> 30) * UINT64_C(0xBF58476D1CE4E5B9);
+        z = (z ^ z >> 27) * UINT64_C(0x94D049BB133111EB);
+        rng_seed[i] = z ^ (z >> 31);
+    }
+}
 
 static inline uint64_t rotl(const uint64_t x, int k) {
   return (x << k) | (x >> (64 - k));
@@ -202,110 +212,140 @@ void shuffle(int *a, int n) { // shuffles the array a of size n
   }
 }
 
-void init_hsm(
-    float *probs) { // initializes global arrays of HSM from probs array
-  if (verbosity > 0)
-    cout << "Constructing HSM tree";
-  vector<size_t> idx(nv); // index array for vertices
-  iota(idx.begin(), idx.end(), 0);
-  sort(idx.begin(), idx.end(), // we need to sort the index array as in probs
-       [&probs](size_t i1, size_t i2) { return probs[i1] > probs[i2]; });
-  if (verbosity > 1)
-    cout << ".";
-  float *count = static_cast<float *>(calloc(nv * 2 + 1, sizeof(float)));
-  byte *binary = static_cast<byte *>(calloc(nv * 2 + 1, sizeof(byte)));
-  int *parent_node = static_cast<int *>(calloc(nv * 2 + 1, sizeof(int)));
-  for (int a = 0; a < nv; a++)
-    count[a] = probs[idx[a]];
-  for (int a = nv; a < nv * 2; a++)
-    count[a] = 1e25;
-  int pos1 = nv - 1;
-  int pos2 = nv;
-  int min1i, min2i; // relentlessly copied from word2vec
-  for (int a = 0; a < nv - 1; a++) {
-    // First, find two smallest nodes 'min1, min2'
-    if (pos1 >= 0) {
-      if (count[pos1] < count[pos2]) {
-        min1i = pos1;
-        pos1--;
-      } else {
-        min1i = pos2;
-        pos2++;
-      }
-    } else {
-      min1i = pos2;
-      pos2++;
+void huffman_tree::make(const float *weights, const int *indices, size_t nv) {
+    for (int a = 0; a < nv; a++) {
+        count[a] = weights[indices[a]];
+        count[a + nv] = 1e25;
     }
-    if (pos1 >= 0) {
-      if (count[pos1] < count[pos2]) {
-        min2i = pos1;
-        pos1--;
-      } else {
-        min2i = pos2;
-        pos2++;
-      }
-    } else {
-      min2i = pos2;
-      pos2++;
+
+    int pos1 = nv - 1;
+    int pos2 = nv;
+    int min1i, min2i; // relentlessly copied from word2vec
+
+    for (int a = 0; a < nv - 1; a++) {
+        // First, find two smallest nodes 'min1, min2'
+        if (pos1 >= 0) {
+            if (count[pos1] < count[pos2]) {
+                min1i = pos1;
+                pos1--;
+            } else {
+                min1i = pos2;
+                pos2++;
+            }
+        } else {
+            min1i = pos2;
+            pos2++;
+        }
+
+        //  Find the first child.
+        parent[min1i] = nv + a;
+        binary[min1i] = 0;
+
+        if (pos1 >= 0) {
+            if (count[pos1] < count[pos2]) {
+                min2i = pos1;
+                pos1--;
+            } else {
+                min2i = pos2;
+                pos2++;
+            }
+        } else {
+            min2i = pos2;
+            pos2++;
+        }
+
+        //  Find the second child.
+        parent[min2i] = nv + a;
+        binary[min2i] = 1;
+
+        //  Calc weight in parent node.
+        count[nv + a] = count[min1i] + count[min2i];
     }
-    count[nv + a] = count[min1i] + count[min2i];
-    parent_node[min1i] = nv + a;
-    parent_node[min2i] = nv + a;
-    binary[min2i] = 1;
-  }
-  if (verbosity > 1)
-    cout << ".";
-  hsm_indptrs =
-      static_cast<int *>(aligned_malloc((nv + 1) * sizeof(int), DEFAULT_ALIGN));
-  int total_len = 0;
-  for (int a = 0; a < nv; a++) {
-    int b = a;
-    int i = 0;
-    while (true) {
-      total_len++;
-      i++;
-      b = parent_node[b];
-      if (b == nv * 2 - 2)
-        break;
+}
+
+//  initializes global arrays of HSM from probs array
+void init_hsm(float *probs) {
+    if (verbosity > 0)
+        cout << "Constructing HSM tree";
+
+    vector<int> idx(nv); // index array for vertices
+
+    iota(idx.begin(), idx.end(), 0);
+    // we need to sort the index array as in probs
+    sort(idx.begin(), idx.end(), [&probs] (int i1, int i2) {
+            return probs[i1] > probs[i2];
+    });
+
+    if (verbosity > 1)
+        cout << '.';
+
+    huffman_tree ht(probs, idx.data(), nv);
+
+    if (verbosity > 1)
+        cout << '.';
+
+    hsm_indptrs = static_cast<int *>(
+        aligned_malloc((nv + 1) * sizeof(int), DEFAULT_ALIGN));
+
+    int total_len = 0;
+
+    for (int a = 0; a < nv; ++a) {
+        int b = a;
+        int i = 0;
+
+        do {
+            total_len++;
+            i++;
+            b = ht.parent[b];
+        } while (b != nv * 2 - 2);
+
+        hsm_indptrs[idx[a]] = -i;
     }
-    hsm_indptrs[idx[a]] = -i;
-  }
-  hsm_indptrs[nv] = total_len;
-  for (int i = nv - 1; i >= 0; i--)
-    hsm_indptrs[i] += hsm_indptrs[i + 1];
-  hsm_ptrs = static_cast<int *>(
-      aligned_malloc(total_len * sizeof(int), DEFAULT_ALIGN));
-  hsm_codes =
-      static_cast<ull *>(aligned_malloc(nv * sizeof(ull), DEFAULT_ALIGN));
-  int point[MAX_CODE_LENGTH];
-  byte code[MAX_CODE_LENGTH];
-  for (int a = 0; a < nv; a++) {
-    int b = a;
-    int i = 0;
-    while (true) {
-      code[i] = binary[b];
-      point[i] = b;
-      i++;
-      b = parent_node[b];
-      if (b == nv * 2 - 2)
-        break;
+
+    hsm_indptrs[nv] = total_len;
+
+    for (int i = nv - 1; i >= 0; --i) {
+        hsm_indptrs[i] += hsm_indptrs[i + 1];
     }
-    int ida = idx[a];
-    int curptr = hsm_indptrs[ida];
-    for (b = 0; b < i; b++) {
-      hsm_codes[ida] ^= (hsm_codes[ida] ^ -code[b]) & // set bit i - b - 1
-                        1 << i - b - 1; // faith in operator priority
-      hsm_ptrs[curptr + i - b] = point[b] - nv;
+
+    hsm_ptrs = static_cast<int *>(
+        aligned_malloc(total_len * sizeof(int), DEFAULT_ALIGN));
+
+    hsm_codes = static_cast<ull *>(
+        aligned_malloc(nv * sizeof(ull), DEFAULT_ALIGN));
+
+    int point[MAX_CODE_LENGTH];
+    byte code[MAX_CODE_LENGTH];
+
+    for (int a = 0; a < nv; ++a) {
+        int b = a;
+        int i = 0;
+
+        do {
+            code[i] = ht.binary[b];
+            point[i] = b;
+            i++;
+            b = ht.parent[b];
+        } while (b != nv * 2 - 2);
+
+        int ida = idx[a];
+        int curptr = hsm_indptrs[ida];
+        hsm_codes[ida] = 0;
+
+        for (int b = 0; b < i; ++b) {
+            // set bit i - b - 1 faith in operator priority
+            hsm_codes[ida] ^= (hsm_codes[ida] ^ -code[b]) & 1 << i - b - 1;
+            hsm_ptrs[curptr + i - b - 1] = point[b] - nv;
+        }
     }
-  }
-  for (int a = 0; a < nv; a++)
-    hsm_ptrs[hsm_indptrs[idx[a]]] = nv - 2;
-  if (verbosity > 0)
-    cout << "." << endl
-         << "Done! Average code size: " << hsm_indptrs[nv] / float(nv) << endl;
-  free(count);
-  free(binary);
-  free(parent_node);
+
+    for (int a = 0; a < nv; ++a)
+        hsm_ptrs[hsm_indptrs[idx[a]]] = nv - 2;
+
+    if (verbosity > 0)
+        cout << "." << endl
+            << "Done! Average code size: "
+            << hsm_indptrs[nv] / float(nv) << endl;
 }
 
 int ArgPos(char *str, int argc, char **argv) {
@@ -408,7 +448,7 @@ void Train() {
   }
 }
 
-int main(int argc, char **argv) {
+int run(int argc, char **argv) {
   int a;
   string network_file, embedding_file;
   ull seed = time(nullptr); // default seed is somewhat random
@@ -447,12 +487,7 @@ int main(int argc, char **argv) {
   if ((a = ArgPos(const_cast<char *>("-nprwalks"), argc, argv)) > 0)
     dw_window_size = atoi(argv[a + 1]);
 #endif
-  for (int i = 0; i < 2; i++) { // seed the RNG
-	ull z = seed += UINT64_C(0x9E3779B97F4A7C15);
-	z = (z ^ z >> 30) * UINT64_C(0xBF58476D1CE4E5B9);
-	z = (z ^ z >> 27) * UINT64_C(0x94D049BB133111EB);
-	rng_seed[i] = z ^ (z >> 31);
-  }
+  init_rng(seed);
   ifstream embFile(network_file, ios::in | ios::binary);
   if (embFile.is_open()) {
     char header[] = "----";

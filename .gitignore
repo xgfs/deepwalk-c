@@ -1,6 +1,7 @@
 # ignore target binary
 deepwalk
 !deepwalk/
+deepwalk-test
 
 # ignore obeject files
 *.o
