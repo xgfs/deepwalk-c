@@ -14,6 +14,32 @@ should be enough on most platforms. If you need to change the default compiler (
 
 Intel® FMA availability is crucial for performance of the implementation, meaning the processor  Haswell (2013). You will get a warning on runtime if your processor does not support it.
 
+### Usage
+
+```
+Usage: deepwalk [OPTIONS]
+
+Options:
+  -input PATH                    Input file in binary CSR format
+  -output PATH                   Output file, written in binary
+  -threads INT                   Number of threads to use (default 1)
+                                   Note: hyperthreading helps as well
+  -dim INT                       DeepWalk parameter d: dimensionality of
+                                   embeddings (default 128)
+  -nwalks INT                    DeepWalk parameter gamma: number of walks per
+                                   node (default 80)
+  -walklen INT                   DeepWalk parameter t: length of random walk
+                                   from each node(default 80)
+  -window INT                    DeepWalk parameter w: window size (default 10)
+  -nprwalks INT                  Implementation parameter w: number of random
+                                   walks for HSM tree (default 100)
+  -lr FLOAT                      Initial learning rate
+  -seed INT                      Sets the random number generator seed to INT
+  -verbose INT                   Controls verbosity level in [0,1,2], 0 meaning
+                                   nothing will be displayed, and 2 mening
+                                   training progress will be displayed.
+```
+
 ### Graph format
 
 This implementation uses a custom graph format, namely binary [compressed sparse row](https://en.wikipedia.org/wiki/Sparse_matrix#Compressed_sparse_row_.28CSR.2C_CRS_or_Yale_format.29) (BCSR) format for efficiency and reduced memory usage. Converter for three common graph formats (MATLAB sparse matrix, adjacency list, edge list) can be found in the root directory of the project. Usage:
