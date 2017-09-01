@@ -88,6 +88,15 @@ float *sigmoid_table;
 // We use xoroshiro128+, the fastest generator available
 uint64_t rng_seed[2];
 
+void init_rng(uint64_t seed) {
+    for (int i = 0; i < 2; i++) {
+        ull z = seed += UINT64_C(0x9E3779B97F4A7C15);
+        z = (z ^ z >> 30) * UINT64_C(0xBF58476D1CE4E5B9);
+        z = (z ^ z >> 27) * UINT64_C(0x94D049BB133111EB);
+        rng_seed[i] = z ^ (z >> 31);
+    }
+}
+
 static inline uint64_t rotl(const uint64_t x, int k) {
   return (x << k) | (x >> (64 - k));
 }
@@ -137,7 +146,7 @@ inline void aligned_free(void *ptr) { // universal aligned free for win & linux
 
 void init_sigmoid_table() { // this shoould be called before fast_sigmoid once
   sigmoid_table =
-      static_cast<float *>(malloc((sigmoid_table_size + 1) * sizeof(float)));
+      static_cast<float *>(aligned_malloc((sigmoid_table_size + 1) * sizeof(float), DEFAULT_ALIGN));
   for (int k = 0; k != sigmoid_table_size; k++) {
     float x = 2 * SIGMOID_BOUND * k / sigmoid_table_size - SIGMOID_BOUND;
     sigmoid_table[k] = 1 / (1 + exp(-x));
@@ -274,7 +283,7 @@ void init_hsm(
   for (int i = nv - 1; i >= 0; i--)
     hsm_indptrs[i] += hsm_indptrs[i + 1];
   hsm_ptrs = static_cast<int *>(
-      aligned_malloc(total_len * sizeof(int), DEFAULT_ALIGN));
+      aligned_malloc((total_len + 1) * sizeof(int), DEFAULT_ALIGN));
   hsm_codes =
       static_cast<ull *>(aligned_malloc(nv * sizeof(ull), DEFAULT_ALIGN));
   int point[MAX_CODE_LENGTH];
@@ -292,6 +301,7 @@ void init_hsm(
     }
     int ida = idx[a];
     int curptr = hsm_indptrs[ida];
+    hsm_codes[ida] = 0;
     for (b = 0; b < i; b++) {
       hsm_codes[ida] ^= (hsm_codes[ida] ^ -code[b]) & // set bit i - b - 1
                         1 << i - b - 1; // faith in operator priority
@@ -447,12 +457,7 @@ int main(int argc, char **argv) {
   if ((a = ArgPos(const_cast<char *>("-nprwalks"), argc, argv)) > 0)
     dw_window_size = atoi(argv[a + 1]);
 #endif
-  for (int i = 0; i < 2; i++) { // seed the RNG
-	ull z = seed += UINT64_C(0x9E3779B97F4A7C15);
-	z = (z ^ z >> 30) * UINT64_C(0xBF58476D1CE4E5B9);
-	z = (z ^ z >> 27) * UINT64_C(0x94D049BB133111EB);
-	rng_seed[i] = z ^ (z >> 31);
-  }
+  init_rng(seed);
   ifstream embFile(network_file, ios::in | ios::binary);
   if (embFile.is_open()) {
     char header[] = "----";
