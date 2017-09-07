@@ -69,7 +69,7 @@ def list2mat(input, undirected, sep):
     if isnumbers:
         node2id = dict(zip(sorted(map(int, nodes)), range(number_of_nodes)))
     else:
-        node2id = dict(zip(nodes), range(number_of_nodes))
+        node2id = dict(zip(sorted(nodes), range(number_of_nodes)))
     graph = defaultdict(set)
     with open(input, 'r') as inf:
         for line in inf:
