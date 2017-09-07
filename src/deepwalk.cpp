@@ -163,6 +163,7 @@ float fast_sigmoid(float x) {
 }
 
 inline int sample_neighbor(int node) { // sample neighbor node from a graph
+  if (offsets[node] == offsets[node + 1]) return -1;
   return edges[irand(offsets[node], offsets[node + 1])];
 }
 
@@ -176,9 +177,11 @@ void estimate_pr_rw(
     outputs[current_node]++;
     while (drand() < alpha) { // kill with probability 1-alpha
       current_node = sample_neighbor(current_node);
+      if(current_node==-1) break;
       outputs[current_node]++;
     }
   }
+  if(verbosity>=2) cout << "PR estimate complete" << endl;
 }
 #endif
 
@@ -189,16 +192,20 @@ void estimate_dw_probs(float *outputs) { // fills the first argument with counts
                                          // estimate_pr_rw with no effect on
                                          // performance
   memset(outputs, 0, nv * sizeof(float));
+#pragma omp parallel for num_threads(n_threads)
   for (int i = 0; i < nv; i++) {
+    if(verbosity>=2 && i % 100000 == 0) cout << "." << flush;
     for (int j = 0; j < dw_n_walks; j++) {
       int curnode = j;
       for (int k = 1; k < dw_walk_length; k++) {
         outputs[curnode]++;
         curnode = sample_neighbor(curnode);
+        if(curnode == -1) break;
       }
       outputs[curnode]++;
     }
   }
+  if(verbosity>=2) cout << endl;
 }
 #endif
 
@@ -214,13 +221,13 @@ void shuffle(int *a, int n) { // shuffles the array a of size n
 void init_hsm(
     float *probs) { // initializes global arrays of HSM from probs array
   if (verbosity > 0)
-    cout << "Constructing HSM tree";
+    cout << "Constructing HSM tree" << flush;
   vector<size_t> idx(nv); // index array for vertices
   iota(idx.begin(), idx.end(), 0);
   sort(idx.begin(), idx.end(), // we need to sort the index array as in probs
        [&probs](size_t i1, size_t i2) { return probs[i1] > probs[i2]; });
   if (verbosity > 1)
-    cout << ".";
+    cout << "." << flush;
   float *count = static_cast<float *>(calloc(nv * 2 + 1, sizeof(float)));
   byte *binary = static_cast<byte *>(calloc(nv * 2 + 1, sizeof(byte)));
   int *parent_node = static_cast<int *>(calloc(nv * 2 + 1, sizeof(int)));
@@ -263,7 +270,7 @@ void init_hsm(
     binary[min2i] = 1;
   }
   if (verbosity > 1)
-    cout << ".";
+    cout << "." << flush;
   hsm_indptrs =
       static_cast<int *>(aligned_malloc((nv + 1) * sizeof(int), DEFAULT_ALIGN));
   int total_len = 0;
@@ -312,7 +319,7 @@ void init_hsm(
     hsm_ptrs[hsm_indptrs[idx[a]]] = nv - 2;
   if (verbosity > 0)
     cout << "." << endl
-         << "Done! Average code size: " << hsm_indptrs[nv] / float(nv) << endl;
+         << "Done! Average code size: " << hsm_indptrs[nv] / float(nv) << endl << flush;
   free(count);
   free(binary);
   free(parent_node);
@@ -393,6 +400,7 @@ void Train() {
       for (int dwi = 0; dwi < dw_walk_length; dwi++) {
         int b = irand(dw_window_size); // subsample window size
         int n1 = dw_rw[dwi];
+        if(n1 == -1) break;
         for (int dwj = max(0, dwi - dw_window_size + b);
              dwj < min(dwi + dw_window_size - b + 1, dw_walk_length); dwj++) {
           if (dwi == dwj)
