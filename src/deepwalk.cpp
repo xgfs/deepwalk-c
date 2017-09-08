@@ -406,6 +406,8 @@ void Train() {
           if (dwi == dwj)
             continue;
           int n2 = dw_rw[dwj];
+          if (n2 == -1)
+            break;
           if (n1 == n2)
             continue;
           memset(cache, 0, n_hidden * sizeof(float)); // clear cache
