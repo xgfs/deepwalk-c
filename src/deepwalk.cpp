@@ -41,7 +41,7 @@ typedef unsigned char byte;
   HSM_INIT_PR // change here to use different HSM initialization. PR init tested
 // to be the best cost/performance ratio
 #define LOWMEM_HSM                                                             \
-  1 // change to 1 to use 64 bits for HSM tree construction. Will fail for
+  0 // change to 1 to use 64 bits for HSM tree construction. Will fail for
 // graphs bigger than 500k nodes
 #endif
 // </MODEL_DEF>
