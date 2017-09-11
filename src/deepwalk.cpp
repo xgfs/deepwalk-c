@@ -182,6 +182,7 @@ void estimate_pr_rw(
     float *outputs, int samples = 1000000,
     float alpha = 0.85) { // fills the first argument with random walk counts
   memset(outputs, 0, nv * sizeof(float));
+#pragma omp parallel for num_threads(n_threads)
   for (int i = 0; i < samples; i++) {
     int current_node = irand(nv);
     outputs[current_node]++;
