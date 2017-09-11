@@ -84,7 +84,7 @@ ull *hsm_codes; // HSM codes for each vertex
                 // matrix. It is faster and more memory effecient than default
                 // word2vec implementations
 #else
-byte *hsm_codes_; // HSM codes for each vertex
+byte *hsm_codes; // HSM codes for each vertex
 #endif
 int *hsm_ptrs;    // HSM pointers for each vertex
 int *hsm_indptrs; // HSM offsets for each vertex
@@ -311,9 +311,9 @@ void init_hsm(
       static_cast<ull *>(aligned_malloc(nv * sizeof(ull), DEFAULT_ALIGN));
   memset(hsm_codes, 0, nv * sizeof(ull));
 #else
-  hsm_codes_ = static_cast<byte *>(
+  hsm_codes = static_cast<byte *>(
       aligned_malloc((total_len + 1) * sizeof(byte), DEFAULT_ALIGN));
-  memset(hsm_codes_, 0, (total_len + 1) * sizeof(byte));
+  memset(hsm_codes, 0, (total_len + 1) * sizeof(byte));
 #endif
   int point[MAX_CODE_LENGTH];
   byte code[MAX_CODE_LENGTH];
@@ -335,7 +335,7 @@ void init_hsm(
       hsm_codes[ida] ^= (hsm_codes[ida] ^ -code[b]) & // set bit i - b - 1
                         1 << i - b - 1; // faith in operator priority
 #else
-      hsm_codes_[curptr + i - b - 1] = code[b];
+      hsm_codes[curptr + i - b - 1] = code[b];
 #endif
       hsm_ptrs[curptr + i - b] = point[b] - nv;
     }
@@ -449,7 +449,7 @@ void Train() {
                 code >> hsi - hsm_indptrs[n1] &
                 1; // label at level hsi - hsm_indptrs[n1]
 #else
-                hsm_codes_[hsi];
+                hsm_codes[hsi];
 #endif
             update(&wCtx[tou * n_hidden], &wVtx[n2 * n_hidden], cache, lr, lab);
           }
