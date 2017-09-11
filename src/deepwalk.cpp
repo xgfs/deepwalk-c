@@ -5,9 +5,9 @@
 #include <iomanip>
 #include <iostream>
 #include <numeric>
-#include <string.h>
 #include <omp.h>
 #include <queue>
+#include <string.h>
 
 #if defined(__AVX2__) ||                                                       \
     defined(__FMA__) // icpc, gcc and clang register __FMA__, VS does not
@@ -39,7 +39,10 @@ typedef unsigned char byte;
 #ifndef INIT_HSM
 #define INIT_HSM                                                               \
   HSM_INIT_PR // change here to use different HSM initialization. PR init tested
-              // to be the best cost/performance ratio
+// to be the best cost/performance ratio
+#define LOWMEM_HSM                                                             \
+  1 // change to 1 to use 64 bits for HSM tree construction. Will fail for
+// graphs bigger than 500k nodes
 #endif
 // </MODEL_DEF>
 
@@ -64,19 +67,25 @@ int num_pr_walks = 100; // Implementation parameter, number of walks per node in
 ull step = 0; // global atomically incremented step counter
 
 ull nv = 0, ne = 0; // number of nodes and edges
-// We use CSR format for the graph matrix (unweighted).
-// Adjacent nodes for vertex i are stored in edges[offsets[i]:offsets[i+1]]
-int *offsets;     // CSR index pointers for nodes.
-int *edges;       // CSR offsets
-int *train_order; // We shuffle the nodes for better performance
+                    // We use CSR format for the graph matrix (unweighted).
+                    // Adjacent nodes for vertex i are stored in
+                    // edges[offsets[i]:offsets[i+1]]
+int *offsets;       // CSR index pointers for nodes.
+int *edges;         // CSR offsets
+int *train_order;   // We shuffle the nodes for better performance
 
 float *wVtx; // Vertex embedding, aka DeepWalk's \Phi
 float *wCtx; // Hierarchical Softmax tree
 
 float *hsm_weights; // Weights (probabilities) for constructing HSM tree
-ull *hsm_codes;     // HSM codes for each vertex
-// We employ format similar to CSR to store nv*MAX_CODE_LENGTH matrix. It is
-// faster and more memory effecient than default word2vec implementations
+#if LOWMEM_HSM
+ull *hsm_codes; // HSM codes for each vertex
+                // We employ format similar to CSR to store nv*MAX_CODE_LENGTH
+                // matrix. It is faster and more memory effecient than default
+                // word2vec implementations
+#else
+byte *hsm_codes_; // HSM codes for each vertex
+#endif
 int *hsm_ptrs;    // HSM pointers for each vertex
 int *hsm_indptrs; // HSM offsets for each vertex
 
@@ -89,12 +98,12 @@ float *sigmoid_table;
 uint64_t rng_seed[2];
 
 void init_rng(uint64_t seed) {
-    for (int i = 0; i < 2; i++) {
-        ull z = seed += UINT64_C(0x9E3779B97F4A7C15);
-        z = (z ^ z >> 30) * UINT64_C(0xBF58476D1CE4E5B9);
-        z = (z ^ z >> 27) * UINT64_C(0x94D049BB133111EB);
-        rng_seed[i] = z ^ (z >> 31);
-    }
+  for (int i = 0; i < 2; i++) {
+    ull z = seed += UINT64_C(0x9E3779B97F4A7C15);
+    z = (z ^ z >> 30) * UINT64_C(0xBF58476D1CE4E5B9);
+    z = (z ^ z >> 27) * UINT64_C(0x94D049BB133111EB);
+    rng_seed[i] = z ^ (z >> 31);
+  }
 }
 
 static inline uint64_t rotl(const uint64_t x, int k) {
@@ -145,8 +154,8 @@ inline void aligned_free(void *ptr) { // universal aligned free for win & linux
 }
 
 void init_sigmoid_table() { // this shoould be called before fast_sigmoid once
-  sigmoid_table =
-      static_cast<float *>(aligned_malloc((sigmoid_table_size + 1) * sizeof(float), DEFAULT_ALIGN));
+  sigmoid_table = static_cast<float *>(
+      aligned_malloc((sigmoid_table_size + 1) * sizeof(float), DEFAULT_ALIGN));
   for (int k = 0; k != sigmoid_table_size; k++) {
     float x = 2 * SIGMOID_BOUND * k / sigmoid_table_size - SIGMOID_BOUND;
     sigmoid_table[k] = 1 / (1 + exp(-x));
@@ -163,7 +172,8 @@ float fast_sigmoid(float x) {
 }
 
 inline int sample_neighbor(int node) { // sample neighbor node from a graph
-  if (offsets[node] == offsets[node + 1]) return -1;
+  if (offsets[node] == offsets[node + 1])
+    return -1;
   return edges[irand(offsets[node], offsets[node + 1])];
 }
 
@@ -177,11 +187,13 @@ void estimate_pr_rw(
     outputs[current_node]++;
     while (drand() < alpha) { // kill with probability 1-alpha
       current_node = sample_neighbor(current_node);
-      if(current_node==-1) break;
+      if (current_node == -1)
+        break;
       outputs[current_node]++;
     }
   }
-  if(verbosity>=2) cout << "PR estimate complete" << endl;
+  if (verbosity >= 2)
+    cout << "PR estimate complete" << endl;
 }
 #endif
 
@@ -194,18 +206,21 @@ void estimate_dw_probs(float *outputs) { // fills the first argument with counts
   memset(outputs, 0, nv * sizeof(float));
 #pragma omp parallel for num_threads(n_threads)
   for (int i = 0; i < nv; i++) {
-    if(verbosity>=2 && i % 100000 == 0) cout << "." << flush;
+    if (verbosity >= 2 && i % 100000 == 0)
+      cout << "." << flush;
     for (int j = 0; j < dw_n_walks; j++) {
       int curnode = j;
       for (int k = 1; k < dw_walk_length; k++) {
         outputs[curnode]++;
         curnode = sample_neighbor(curnode);
-        if(curnode == -1) break;
+        if (curnode == -1)
+          break;
       }
       outputs[curnode]++;
     }
   }
-  if(verbosity>=2) cout << endl;
+  if (verbosity >= 2)
+    cout << endl;
 }
 #endif
 
@@ -291,8 +306,15 @@ void init_hsm(
     hsm_indptrs[i] += hsm_indptrs[i + 1];
   hsm_ptrs = static_cast<int *>(
       aligned_malloc((total_len + 1) * sizeof(int), DEFAULT_ALIGN));
+#if LOWMEM_HSM
   hsm_codes =
       static_cast<ull *>(aligned_malloc(nv * sizeof(ull), DEFAULT_ALIGN));
+  memset(hsm_codes, 0, nv * sizeof(ull));
+#else
+  hsm_codes_ = static_cast<byte *>(
+      aligned_malloc((total_len + 1) * sizeof(byte), DEFAULT_ALIGN));
+  memset(hsm_codes_, 0, (total_len + 1) * sizeof(byte));
+#endif
   int point[MAX_CODE_LENGTH];
   byte code[MAX_CODE_LENGTH];
   for (int a = 0; a < nv; a++) {
@@ -308,10 +330,13 @@ void init_hsm(
     }
     int ida = idx[a];
     int curptr = hsm_indptrs[ida];
-    hsm_codes[ida] = 0;
     for (b = 0; b < i; b++) {
+#if LOWMEM_HSM
       hsm_codes[ida] ^= (hsm_codes[ida] ^ -code[b]) & // set bit i - b - 1
                         1 << i - b - 1; // faith in operator priority
+#else
+      hsm_codes_[curptr + i - b - 1] = code[b];
+#endif
       hsm_ptrs[curptr + i - b] = point[b] - nv;
     }
   }
@@ -319,7 +344,8 @@ void init_hsm(
     hsm_ptrs[hsm_indptrs[idx[a]]] = nv - 2;
   if (verbosity > 0)
     cout << "." << endl
-         << "Done! Average code size: " << hsm_indptrs[nv] / float(nv) << endl << flush;
+         << "Done! Average code size: " << hsm_indptrs[nv] / float(nv) << endl
+         << flush;
   free(count);
   free(binary);
   free(parent_node);
@@ -400,7 +426,8 @@ void Train() {
       for (int dwi = 0; dwi < dw_walk_length; dwi++) {
         int b = irand(dw_window_size); // subsample window size
         int n1 = dw_rw[dwi];
-        if(n1 == -1) break;
+        if (n1 == -1)
+          break;
         for (int dwj = max(0, dwi - dw_window_size + b);
              dwj < min(dwi + dw_window_size - b + 1, dw_walk_length); dwj++) {
           if (dwi == dwj)
@@ -411,11 +438,19 @@ void Train() {
           if (n1 == n2)
             continue;
           memset(cache, 0, n_hidden * sizeof(float)); // clear cache
+#if LOWMEM_HSM
           ull code = hsm_codes[n1];
+#endif
           for (int hsi = hsm_indptrs[n1]; hsi < hsm_indptrs[n1 + 1]; hsi++) {
             int tou = hsm_ptrs[hsi]; // pointer at level hsi
-            int lab =                // label at level hsi - hsm_indptrs[n1]
-                code >> hsi - hsm_indptrs[n1] & 1;
+
+            int lab =
+#if LOWMEM_HSM
+                code >> hsi - hsm_indptrs[n1] &
+                1; // label at level hsi - hsm_indptrs[n1]
+#else
+                hsm_codes_[hsi];
+#endif
             update(&wCtx[tou * n_hidden], &wVtx[n2 * n_hidden], cache, lr, lab);
           }
           AVX_LOOP
@@ -450,7 +485,7 @@ int main(int argc, char **argv) {
   if ((a = ArgPos(const_cast<char *>("-dim"), argc, argv)) > 0)
     n_hidden = atoi(argv[a + 1]);
   if ((a = ArgPos(const_cast<char *>("-seed"), argc, argv)) > 0)
-	seed = atoi(argv[a + 1]);
+    seed = atoi(argv[a + 1]);
   if ((a = ArgPos(const_cast<char *>("-verbose"), argc, argv)) > 0)
     verbosity = atoi(argv[a + 1]);
   if ((a = ArgPos(const_cast<char *>("-threads"), argc, argv)) > 0)
