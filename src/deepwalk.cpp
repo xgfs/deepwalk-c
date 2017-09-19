@@ -210,7 +210,7 @@ void estimate_dw_probs(float *outputs) { // fills the first argument with counts
     if (verbosity >= 2 && i % 100000 == 0)
       cout << "." << flush;
     for (int j = 0; j < dw_n_walks; j++) {
-      int curnode = j;
+      int curnode = i;
       for (int k = 1; k < dw_walk_length; k++) {
         outputs[curnode]++;
         curnode = sample_neighbor(curnode);
