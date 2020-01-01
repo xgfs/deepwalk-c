@@ -86,8 +86,8 @@ ull *hsm_codes; // HSM codes for each vertex
 #else
 byte *hsm_codes; // HSM codes for each vertex
 #endif
-int *hsm_ptrs;    // HSM pointers for each vertex
-int *hsm_indptrs; // HSM offsets for each vertex
+int *hsm_ptrs;       // HSM pointers for each vertex
+size_t *hsm_indptrs; // HSM offsets for each vertex
 
 const int sigmoid_table_size = 1024; // This should fit in L1 cache
 const float SIGMOID_RESOLUTION = sigmoid_table_size / (SIGMOID_BOUND * 2.0f);
@@ -128,9 +128,12 @@ static inline double drand() {
   return a.d - 1.0;
 }
 
-inline int irand(int max) { return lrand() % max; }
+inline int irand(uint32_t max) {
+  uint32_t rnd = lrand();
+  return (uint64_t(rnd) * uint64_t(max)) >> 32;
+}
 
-inline int irand(int min, int max) { return lrand() % (max - min) + min; }
+inline int irand(uint32_t min, uint32_t max) { return irand(max - min) + min; }
 
 inline void *
 aligned_malloc(size_t size,
@@ -181,7 +184,8 @@ inline int sample_neighbor(int node) { // sample neighbor node from a graph
 void estimate_pr_rw(
     float *outputs, int samples = 1000000,
     float alpha = 0.85) { // fills the first argument with random walk counts
-  memset(outputs, 0, nv * sizeof(float));
+  for (int i = 0; i < nv; i++)
+    outputs[i] = 1;
 #pragma omp parallel for num_threads(n_threads)
   for (int i = 0; i < samples; i++) {
     int current_node = irand(nv);
@@ -204,7 +208,8 @@ void estimate_dw_probs(float *outputs) { // fills the first argument with counts
                                          // process. it is slower than
                                          // estimate_pr_rw with no effect on
                                          // performance
-  memset(outputs, 0, nv * sizeof(float));
+  for (int i = 0; i < nv; i++)
+    outputs[i] = 1;
 #pragma omp parallel for num_threads(n_threads)
   for (int i = 0; i < nv; i++) {
     if (verbosity >= 2 && i % 100000 == 0)
@@ -287,9 +292,9 @@ void init_hsm(
   }
   if (verbosity > 1)
     cout << "." << flush;
-  hsm_indptrs =
-      static_cast<int *>(aligned_malloc((nv + 1) * sizeof(int), DEFAULT_ALIGN));
-  int total_len = 0;
+  hsm_indptrs = static_cast<size_t *>(
+      aligned_malloc((nv + 1) * sizeof(size_t), DEFAULT_ALIGN));
+  size_t total_len = 0;
   for (int a = 0; a < nv; a++) {
     int b = a;
     int i = 0;
@@ -300,11 +305,11 @@ void init_hsm(
       if (b == nv * 2 - 2)
         break;
     }
-    hsm_indptrs[idx[a]] = -i;
+    hsm_indptrs[idx[a]] = i;
   }
   hsm_indptrs[nv] = total_len;
   for (int i = nv - 1; i >= 0; i--)
-    hsm_indptrs[i] += hsm_indptrs[i + 1];
+    hsm_indptrs[i] = hsm_indptrs[i + 1] - hsm_indptrs[i];
   hsm_ptrs = static_cast<int *>(
       aligned_malloc((total_len + 1) * sizeof(int), DEFAULT_ALIGN));
 #if LOWMEM_HSM
@@ -318,9 +323,9 @@ void init_hsm(
 #endif
   int point[MAX_CODE_LENGTH];
   byte code[MAX_CODE_LENGTH];
-  for (int a = 0; a < nv; a++) {
-    int b = a;
-    int i = 0;
+  for (size_t a = 0; a < nv; a++) {
+    size_t b = a;
+    size_t i = 0;
     while (true) {
       code[i] = binary[b];
       point[i] = b;
@@ -330,7 +335,7 @@ void init_hsm(
         break;
     }
     int ida = idx[a];
-    int curptr = hsm_indptrs[ida];
+    size_t curptr = hsm_indptrs[ida];
     for (b = 0; b < i; b++) {
 #if LOWMEM_HSM
       hsm_codes[ida] ^= (hsm_codes[ida] ^ -code[b]) & // set bit i - b - 1
@@ -426,24 +431,24 @@ void Train() {
 
       for (int dwi = 0; dwi < dw_walk_length; dwi++) {
         int b = irand(dw_window_size); // subsample window size
-        int n1 = dw_rw[dwi];
+        size_t n1 = dw_rw[dwi];
         if (n1 == -1)
           break;
         for (int dwj = max(0, dwi - dw_window_size + b);
              dwj < min(dwi + dw_window_size - b + 1, dw_walk_length); dwj++) {
           if (dwi == dwj)
             continue;
-          int n2 = dw_rw[dwj];
-          if (n2 == -1)
+          if (dw_rw[dwj] == -1)
             break;
+          size_t n2 = dw_rw[dwj];
           if (n1 == n2)
             continue;
           memset(cache, 0, n_hidden * sizeof(float)); // clear cache
 #if LOWMEM_HSM
           ull code = hsm_codes[n1];
 #endif
-          for (int hsi = hsm_indptrs[n1]; hsi < hsm_indptrs[n1 + 1]; hsi++) {
-            int tou = hsm_ptrs[hsi]; // pointer at level hsi
+          for (size_t hsi = hsm_indptrs[n1]; hsi < hsm_indptrs[n1 + 1]; hsi++) {
+            size_t tou = hsm_ptrs[hsi]; // pointer at level hsi
 
             int lab =
 #if LOWMEM_HSM
