@@ -506,7 +506,7 @@ int main(int argc, char **argv) {
     dw_window_size = atoi(argv[a + 1]);
 #if INIT_HSM == HSM_INIT_PR
   if ((a = ArgPos(const_cast<char *>("-nprwalks"), argc, argv)) > 0)
-    dw_window_size = atoi(argv[a + 1]);
+    num_pr_walks = atoi(argv[a + 1]);
 #endif
   init_rng(seed);
   ifstream embFile(network_file, ios::in | ios::binary);
