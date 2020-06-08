@@ -14,6 +14,8 @@ should be enough on most platforms. If you need to change the default compiler (
 
 Intel® FMA availability is crucial for performance of the implementation, meaning the processor  Haswell (2013). You will get a warning on runtime if your processor does not support it.
 
+For MacOS with Apple clang, use homebrew `$ brew install libomp` to install OpenMP libraries.
+
 ### Usage
 
 ```
