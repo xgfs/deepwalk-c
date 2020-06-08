@@ -5,6 +5,15 @@ OBJECTS = $(SOURCES:.cpp=.o)
 
 CXXFLAGS = -std=c++11 -march=native
 
+OS := $(shell uname)
+
+ifeq ($(OS),Darwin)
+	CXXFLAGS += -Xpreprocessor
+	LIB = -lomp
+else
+	LIB =
+endif
+
 ifeq ($(CXX), g++)
 	CXXFLAGS += -fopenmp -Ofast
 else ifeq ($(CXX), icpc)
@@ -20,7 +29,7 @@ endif
 all: $(TARGET)
 
 $(TARGET): $(OBJECTS)
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $^
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $^ $(LIB)
 
 clean:
 	rm -rfv $(OBJECTS) $(TARGET)
