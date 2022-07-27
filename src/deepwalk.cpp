@@ -445,15 +445,15 @@ void Train() {
             continue;
           memset(cache, 0, n_hidden * sizeof(float)); // clear cache
 #if LOWMEM_HSM
-          ull code = hsm_codes[n1];
+          ull code = hsm_codes[n2];
 #endif
-          for (size_t hsi = hsm_indptrs[n1]; hsi < hsm_indptrs[n1 + 1]; hsi++) {
+          for (size_t hsi = hsm_indptrs[n2]; hsi < hsm_indptrs[n2 + 1]; hsi++) {
             size_t tou = hsm_ptrs[hsi]; // pointer at level hsi
 
             int lab =
 #if LOWMEM_HSM
-                code >> hsi - hsm_indptrs[n1] &
-                1; // label at level hsi - hsm_indptrs[n1]
+                code >> hsi - hsm_indptrs[n2] &
+                1; // label at level hsi - hsm_indptrs[n2]
 #else
                 hsm_codes[hsi];
 #endif
